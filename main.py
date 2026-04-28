@@ -19,7 +19,19 @@ async def merge(
         path = f"{tmp}/video_{i}.mp4"
         r = requests.get(url, timeout=120)
         open(path, 'wb').write(r.content)
-        video_files.append(path)
+        
+        # re-encode كل فيديو بنفس الإعدادات
+        fixed_path = f"{tmp}/fixed_{i}.mp4"
+        subprocess.run([
+            'ffmpeg', '-y', '-i', path,
+            '-r', '30',
+            '-c:v', 'libx264',
+            '-preset', 'fast',
+            '-crf', '23',
+            '-an',
+            fixed_path
+        ], check=True)
+        video_files.append(fixed_path)
     
     audio_path = f"{tmp}/audio.mp3"
     content = await audio.read()
@@ -28,8 +40,6 @@ async def merge(
     audio_wav = f"{tmp}/audio.wav"
     subprocess.run([
         'ffmpeg', '-y',
-        '-analyzeduration', '100M',
-        '-probesize', '100M',
         '-i', audio_path,
         '-ar', '44100',
         '-ac', '2',
