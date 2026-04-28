@@ -1,7 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
-import subprocess, requests, tempfile, json, os
+import subprocess, requests, tempfile, json
 from typing import List
 
 app = FastAPI()
@@ -12,7 +11,7 @@ async def merge(
     video_urls: str = Form(...)
 ):
     tmp = tempfile.mkdtemp()
-    urls = json.loads(video_urls)[:6]  # بس 6 فيديوهات
+    urls = json.loads(video_urls)[:6]
     
     video_files = []
     for i, url in enumerate(urls):
@@ -24,33 +23,27 @@ async def merge(
         video_files.append(path)
     
     audio_path = f"{tmp}/audio.mp3"
-    content = await audio.read()
-    open(audio_path, 'wb').write(content)
+    open(audio_path, 'wb').write(await audio.read())
     
     list_file = f"{tmp}/list.txt"
     with open(list_file, 'w') as f:
         for vf in video_files:
             f.write(f"file '{vf}'\n")
     
-    concat_path = f"{tmp}/concat.mp4"
-    subprocess.run([
-        'ffmpeg', '-y', '-f', 'concat', '-safe', '0',
-        '-i', list_file,
-        '-vf', 'scale=1280:720',
-        '-c:v', 'libx264', '-preset', 'ultrafast',
-        '-crf', '28', '-an', concat_path
-    ], check=True)
-    
     output_path = f"{tmp}/output.mp4"
+    
+    # دمج مباشر بدون loop
     subprocess.run([
         'ffmpeg', '-y',
-        '-i', concat_path,
+        '-f', 'concat', '-safe', '0', '-i', list_file,
         '-i', audio_path,
         '-map', '0:v:0', '-map', '1:a:0',
-        '-c:v', 'copy', '-c:a', 'aac',
-        '-b:a', '128k', '-shortest',
+        '-vf', 'scale=1280:720',
+        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28',
+        '-c:a', 'aac', '-b:a', '128k',
+        '-shortest',
         output_path
-    ], check=True)
+    ], check=True, timeout=300)
     
     return FileResponse(output_path, media_type='video/mp4', filename='output.mp4')
 
