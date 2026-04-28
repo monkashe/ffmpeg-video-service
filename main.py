@@ -12,39 +12,20 @@ async def merge(
     video_urls: str = Form(...)
 ):
     tmp = tempfile.mkdtemp()
-    urls = json.loads(video_urls)
+    urls = json.loads(video_urls)[:6]  # بس 6 فيديوهات
     
     video_files = []
     for i, url in enumerate(urls):
         path = f"{tmp}/video_{i}.mp4"
-        r = requests.get(url, timeout=120)
-        open(path, 'wb').write(r.content)
-        
-        # re-encode كل فيديو بنفس الإعدادات
-        fixed_path = f"{tmp}/fixed_{i}.mp4"
-        subprocess.run([
-            'ffmpeg', '-y', '-i', path,
-            '-r', '30',
-            '-c:v', 'libx264',
-            '-preset', 'fast',
-            '-crf', '23',
-            '-an',
-            fixed_path
-        ], check=True)
-        video_files.append(fixed_path)
+        r = requests.get(url, timeout=60, stream=True)
+        with open(path, 'wb') as f:
+            for chunk in r.iter_content(8192):
+                f.write(chunk)
+        video_files.append(path)
     
     audio_path = f"{tmp}/audio.mp3"
     content = await audio.read()
     open(audio_path, 'wb').write(content)
-    
-    audio_wav = f"{tmp}/audio.wav"
-    subprocess.run([
-        'ffmpeg', '-y',
-        '-i', audio_path,
-        '-ar', '44100',
-        '-ac', '2',
-        audio_wav
-    ], check=True)
     
     list_file = f"{tmp}/list.txt"
     with open(list_file, 'w') as f:
@@ -54,20 +35,20 @@ async def merge(
     concat_path = f"{tmp}/concat.mp4"
     subprocess.run([
         'ffmpeg', '-y', '-f', 'concat', '-safe', '0',
-        '-i', list_file, '-c', 'copy', concat_path
+        '-i', list_file,
+        '-vf', 'scale=1280:720',
+        '-c:v', 'libx264', '-preset', 'ultrafast',
+        '-crf', '28', '-an', concat_path
     ], check=True)
     
     output_path = f"{tmp}/output.mp4"
     subprocess.run([
         'ffmpeg', '-y',
         '-i', concat_path,
-        '-i', audio_wav,
-        '-map', '0:v:0',
-        '-map', '1:a:0',
-        '-c:v', 'copy',
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-shortest',
+        '-i', audio_path,
+        '-map', '0:v:0', '-map', '1:a:0',
+        '-c:v', 'copy', '-c:a', 'aac',
+        '-b:a', '128k', '-shortest',
         output_path
     ], check=True)
     
